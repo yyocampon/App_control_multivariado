@@ -1,0 +1,13 @@
+name: App_control_multivariado
+title: App_control_multivariado
+username:
+account: yyocampon
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 2471044
+bundleId: 3337228
+url: https://yyocampon.shinyapps.io/App_control_multivariado/
+when: 1593578207.97715
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: Bersimis_et_al-2017-Quality_and_Reliability_Engineering_International.pdf|DATOS1FASEI.csv|respaldo_de_app[V2].R|RNprueba.csv|RNprueba2.csv

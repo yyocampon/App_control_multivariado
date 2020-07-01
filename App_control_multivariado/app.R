@@ -1,0 +1,1447 @@
+# Daniel Betancur
+# Brahian Cano Urrego  
+# Yeison Yovany 
+# Estudiante de estadistica universidad nacional
+# Fecha: 7/09/2019
+
+
+# Paquetes ----------------------------------------------------------------
+
+#Libraries
+rm(list = ls())
+##library(rsconnect)
+#if("shinythemes" %in% rownames(installed.packages()) == FALSE) {install.packages("shinythemes")}
+library(shiny)
+library(shinythemes)
+library(shinyBS)
+library(shinydashboard)
+library(shinymanager)
+library(tidyverse)
+library(ggplot2)
+library(gtools)
+library(shinyWidgets)
+library(xtable)
+library(markdown)
+
+
+options(shiny.maxRequestSize = 100*1024^2)
+# Interfaz del usuario ----------------------------------------------------
+
+
+ui <- fluidPage(theme = shinytheme("lumen"),
+  
+  # Titulo
+  titlePanel("Carta de Control Multivariada"),
+  
+  # Disposicion de la aplicacion con un panela lateral
+  sidebarLayout(
+    
+    # Panel para las entradas del usuario
+    sidebarPanel(
+      #Funcion para generar alertas deacuerdo una condicion
+      useSweetAlert(),
+      #shinythemes::themeSelector(),
+      
+      fluidRow(
+        #Logo de la universidad y boton para hacer los calculos
+        column(6,img(src="escudo.png", height="100%", width="100%")),
+        column(4,
+               switchInput(
+                 inputId = "calcular",
+                 size = "small",
+                 label = "Calcular",
+                 width="100%",
+                 #onStatus = "information", 
+                 offStatus = "danger"
+               ) )
+               ),
+        
+      #sMenu para lectura de datos Historicos
+      conditionalPanel("input.calcular==false",
+                       
+      h3("Subir datos historicos"),
+      
+      p("Seleccione sus datos historicos en",
+        span("formato .csv o .txt ", style = "color:#2FA4E7")) ,
+      
+      # Entrada de datos
+      fileInput(inputId = "HDS", label = NULL, buttonLabel = "Explorar..",
+                accept = c(
+                  "text/csv",
+                  "text/comma-separated-values,text/plain",
+                  ".csv")),
+      
+      # Encabezado
+      checkboxInput(inputId = "header1", label = "Encabezado", value = TRUE),
+      fluidRow(
+        
+        #Pregunta el tipo de separador de los datos 
+        column(6,selectInput("sep1", "Separador",width = "100%",
+                             choices = c("Coma" = ",",
+                                         "Punto coma" = ";",
+                                         "Tabular" = "\t"),
+                             selected = ",")
+        ),
+        #Pregunta el tipo de decimal usado en los datos
+        column(5,selectInput("dec1","Decimal",width = "100%",
+                             choices = c("Punto"=".",
+                                         "Coma"=","),
+                             selected=",")
+        )
+        
+      ),
+      
+      #Menu para los nuevos registros (Fase 2)
+      h3("Subir nuevos registros"),
+      
+      p("Seleccione sus nuevos registros en",
+        span("formato .csv o .txt", style = "color:#2FA4E7")),
+      
+      # Entrada de datos
+      fileInput(inputId = "NR", label =NULL, buttonLabel = "Explorar..",
+                accept = c(
+                  "text/csv",
+                  "text/comma-separated-values,text/plain",
+                  ".csv")),
+      
+      
+      
+      
+      # Encabezado
+      checkboxInput(inputId = "header2", label = "Encabezado", value = FALSE),
+      fluidRow(
+        
+        #Pregunta el tipo de separador de los datos
+        column(6,selectInput("sep2", "Separador",width = "100%",
+                             choices = c("Coma" = ",",
+                                         "Punto coma" = ";",
+                                         "Tabular" = "\t"),
+                             selected = ",")
+        ),
+        #Pregunta el tipo de decimal usado en los datos
+        column(5,selectInput("dec2","Decimal",width = "100%",
+                             choices = c("Punto"=".",
+                                         "Coma"=","),
+                             selected=",")
+        )
+        
+      )
+      
+      ),#Final condicional desplegar menu
+      
+      #Menu para las funciones
+      conditionalPanel("input.calcular==true",
+      # Nivel de significancia historicos
+      numericInput(inputId = "alpha1", label = "Significancia historicos", value = 0.05, min = 0, max = 1, step = 0.01),
+      # Nivel de significancia fase 2
+      numericInput(inputId = "alpha2", label = "Significancia nuevos", value = 0.05, min = 0, max = 1, step = 0.01),
+      
+      # Seleccion de resultados
+      checkboxGroupInput(inputId = "resultados", label = "Resultados deseados",
+                         choices = c("Resumen numerico HDS"="rhds", "Resumen numerico nuevos datos"="rnd", 
+                                     "MYT", "Murphy", "DFT", "MBA"), selected = NULL)
+      
+      ),#FInal del condicional 2
+      tags$hr(size=20,style="border-color: #000000;"),
+      
+      tags$p("Autores:"),
+      tags$ul(
+        tags$li(tags$a(href="mailto:bcanou@unal.edu.co", "Brahian Cano Urrego")),
+        tags$li(tags$a(href="mailto:dbetancurro@unal.edu.co", "Daniel Betancur Rodriguez")),
+        tags$li(tags$a(href="mailto:yyocampon@unal.edu.co", "Yeison Y. Ocampo Naranjo"))
+      ),
+      tags$p("Profesores:"),
+      tags$ul(
+        tags$li(tags$a(href="mailto:iscramirezgu@unal.edu.co", "Isabel C. Ramirez Guevara")),
+        tags$li(tags$a(href="mailto:ngonzale@unal.edu.co", "Nelfy G. Gonzales Alvarez"))
+      )
+      
+    ),#Final del panel izquierdo
+    
+    
+    #Panel principal
+    
+    # Salida de resultados
+    mainPanel(
+      # Se genera una division de las ventanas para resultados y ficha tecnica
+      tabsetPanel(
+        # Se genera la ventana de analisis y resultados
+        tabPanel("Analisis",
+                 
+      #Desplegiaga como estan siendo leidos los datos en primera estancia
+                conditionalPanel("input.calcular==false",
+                tableOutput("contents1"),
+                tableOutput("contents2") 
+                ),#Final condicional 1
+                
+                
+                #Luego de una correcta lectura de datos, se aplican las funciones deseadas
+                conditionalPanel("input.calcular==true",
+                # Grafico de la carta T2 datos historicos
+                plotOutput(outputId = "cartaT2"),
+                #Resultados MYT
+                htmlOutput("t1"),
+                uiOutput("table1"),
+                #Resultados Murphy
+                htmlOutput("t2"),
+                uiOutput("table2"),
+                #Resultados DFT
+                htmlOutput("t3"),
+                uiOutput("table3"),
+                #Resultado MBA
+                htmlOutput("t4"),
+                uiOutput("table4"),
+                # Resumen numerico HDS
+                htmlOutput("rhds"),
+                uiOutput("thds"),
+                # Resumen numerico HDS
+                htmlOutput("rnd"),
+                uiOutput("tnd")
+                )
+                # Final condicional 2
+                ),
+       
+      #Final de la primer ventana
+      tabPanel("Ficha Tecnica",
+               tags$iframe(style = " height: 400px; width: 100%; scrolling = yes ",
+                           src="Ficha_tecnica.pdf"
+                          )
+              ),
+      tabPanel("Manual de Usuario",
+               fluidRow(
+               h3("Uso de la herrramienta:"),
+               p("Para el uso de esta aplicacion se requieren dos conjuntos de datos: el primero que sera los datos historicos
+                 los cuales se asumen estan en control y el segundo sera el conjunto de datos nuevos a inspeccionar los cuales
+                 se cargaran como archivos de texto plano .txt o .csv permitiendo elegir el separador de los datos y el decimal
+                 y si los datos poseen encabezados. Posteriormente se activa el boton de calcular y se despliega una serie de botones
+                 elegibles en los cuales encontrara alternativas para la visualizacion de los datos historicos, los datos nuevos a establecer
+                 y los metodos para la identificacion de variables culpables de senales en los nuevos datos en un proceso de control de calidad"),
+               column(4,img(src="CargaHistorico.JPG", height="70%", width="70%")),
+               column(4,img(src="CargaNuevos.JPG", height="70%", width="70%")),
+               #column(6,img(src="CalcularMetodos.jpg", height="100%", width="100%")),
+               column(4,img(src="BotonesMetodos.JPG", height="60%", width="60%")),
+               tags$br(),
+               tags$br(),
+               tags$br(),
+               tags$hr(size=20,style="border-color: #000000;"),
+               #h3("Ejemplo de la aplicacion con datos:"),
+               tags$br(),
+               tags$hr(size=20,style="border-color: #000000;"),
+               tags$h3("Ejemplo de la aplicacion con datos:"),
+               tags$br(),
+               tags$p("A continuacion se presenta el ejemplo de una de las salidas cuando los datos son debidamente diligenciados"),
+               column(12,img(src="Imagen_app.PNG", height="100%", width="100%")),
+               tags$br(),
+               tags$p("Nota: ",
+                 span("Todo el texto se encuentra sin tildes o caracteres tipo UTF-8 debido a la plataforma usada actualmente ",
+                      style = "color:#e72f48"))
+               )
+               )
+        )
+      
+      
+      )#Final panel principal
+    
+  )#Final de disposicion
+  
+)#Final Ui
+
+# Servidor ----------------------------------------------------------------
+
+server <- function(input, output, session) {
+
+  
+  
+  
+  # Funciones ---------------------------------------------------------------
+  
+  UCL2 <- function(m, p, alpha){
+    ucl <- ((m-1)^2/m)*qbeta((1-alpha), p/2, (m-p-1)/2)
+    return(ucl)
+  }
+  
+  UCL3 <- function(n, p, alpha){
+    ucl <- (p*(n+1)*(n-1))/(n*(n-p))*qf((1-alpha), p, n-p)
+    return(ucl)
+  }
+  
+  
+  # Funcion para graficar la carta ------------------------------------------
+  
+  T2plot <- function(x,y, alpha1 = 0.05, alpha2 = 0.05,session){
+    
+    # Vector de medias del HDS
+    xmedia <- apply(x, 2, mean)
+    
+    # Matriz de varianzas y covarianzas del HDS
+    vars <- var(x)
+    
+    # T2 de las observaciones del HDS
+    t2 <- mahalanobis(x, center = xmedia, cov = vars)
+    
+    # T2 de las observaciones de los nuevos registros
+    t2n <- mahalanobis(y, center = xmedia, cov =vars)
+    
+    # Vector de todos los T2
+    T2 <- c(t2, t2n)
+    
+    # Dimensiones del HDS
+    dimen <- dim(x)
+    
+    # Observaciones del HDS
+    m <- dimen[1]
+    
+    # Numero de variables
+    p <- dimen[2]
+    
+    # Observaciones nuevas
+    k <- nrow(y)
+    
+    # UCL del HDS
+    UCLd <- UCL2(m = m, p = p, alpha = alpha1)
+    
+    # UCL de los nuevos registros
+    UCLn <- UCL3(m, p, alpha2)
+    
+    # Instrucciones graficas
+    obs <- c(1:(m+k))
+    maxt <- max(T2)
+    plot(obs, T2, type = "l", xlim = c(0, m + k + 2), ylim = c(0, max((UCLd+2),(UCLn + 2), (maxt + 2))),
+         main = expression("Carta"*~T^2),
+         ylab = expression(T ^2), xlab = "No. Observacion", font = 2, las = 1)
+    segments(x0 = 0, y0 = UCLd, x1 = m+0.5, y1 = UCLd, col = "red", lty = 3)
+    segments(x0 = m+0.5, y0 = UCLn, x1 = m+k+1, y1 = UCLn, col = "red", lty = 3)
+    abline(v = m+0.5,lty = 3, col = "blue",lwd=2.5 )
+    for (i in 1:m) {
+      temp <- ifelse(T2[i] > UCLd, 19, 20)
+      tcol <- ifelse(T2[i] > UCLd, "red", "black")
+      points(obs[i], T2[i], pch = temp, col = tcol)
+      if(T2[i]>UCLd) {
+        text(i, T2[i], labels = paste(i), pos = 3, font = 2, cex = 0.7)
+        #Genera una alerta en el caso que algun punto de los
+        #datos historicos este fuera de control
+        sendSweetAlert(
+          session = session,
+          title = "Advertencia",
+          text = "Alguno de sus datos historicos estan fuera de control",
+          type = "warning"
+        )
+        
+      }
+    }
+    senales <- c()
+    for (i in (m+1):(m+k)) {
+      temp <- ifelse(T2[i] > UCLn, 19, 20)
+      tcol <- ifelse(T2[i] > UCLn, "red", "black")
+      points(obs[i], T2[i], pch = temp, col = tcol)
+      if(T2[i]>UCLn) text(i, T2[i], labels = paste(i-m), pos = 3, font = 2, cex = 0.7)
+      if(T2[i]>UCLn) senales <- c(senales, i)
+    }
+    #text(m+0.5,0,paste("Fin HDS"),pos=3,font=2,cex=0.7)
+    legend("topleft",c(paste("Datos historicos: ",m),
+                       paste("Nuevos datos: ", k),
+                       paste("UCL HDS:", round(UCLd, 2)),
+                       paste("UCL nuevos datos:", round(UCLn, 2)))
+           ,ncol=3,cex=1,bg="transparent", box.col = "transparent")
+    
+  }
+  
+  
+  # Funcion del resumen numerico --------------------------------------------
+  
+  T2info <- function(x,y, alpha1 = 0.05, alpha2 = 0.05){
+    
+    xmedia <- apply(x, 2, mean)
+    vars <- var(x)
+    t2 <- mahalanobis(x, center = xmedia, cov = vars)
+    t2n <- mahalanobis(y, center = xmedia, cov =vars)
+    T2 <- c(t2, t2n)
+    dimen <- dim(x)
+    m <- dimen[1]
+    p <- dimen[2]
+    n <- 1
+    k <- nrow(y)
+    UCLd <- UCL2(m = m, p = p, alpha = alpha1)
+    UCLn <- UCL3(m, p, alpha2)
+    obs <- c(1:(m+k))
+    senales <- c()
+    for (i in (m+1):(m+k)) {
+      if(T2[i]>UCLn) senales <- c(senales, i)
+      
+    }
+    resultadosHDS <- list(Medias = xmedia, Covarianzas = vars, Observaciones = m, T2 = t2)
+    resultadosND <- list(Observaciones = k, T2 = t2n, senales = senales-m)
+    resultados <- list(ResultadosHDS = resultadosHDS, ResultadosND = resultadosND)
+    return(resultados)
+  }
+  
+  
+  
+  
+  
+  # Metodo MYT --------------------------------------------------------------
+  MYT <- function(dat, HSD, alpha = 0.05){
+    
+    print("--------------------------Metodo MYT-----------------------------")
+    
+    # Numero de observaciones usadas en la fase 1
+    n <- nrow(HSD)
+    
+    # Vector de medias historico
+    X <- apply(HSD,2,mean)
+    
+    # Matriz de varianzas historicas
+    S <- var(HSD)
+    
+    # Numero de observaciones usadas en la fase 2
+    n1 <- nrow(dat)
+    
+    # Numero de variables
+    p <- ncol(dat)
+    
+    # Calculo del UCL teorico a partir de la media y varianza especificada
+    UCL<-((p*(n+1)*(n-1)) / (n*(n-p)))*qf((1-alpha),p,n-p)
+    
+    # Calculo del T2 para cada vector de observaciones
+    T2<-mahalanobis(dat,center=X,cov=S)
+    
+    # Vector de indices de las alarmas
+    alarma <- T2info(HSD, dat, alpha2 = alpha)[[2]]$senales
+    
+    #listas para almacenar las salidas necesarias de la funcion
+    tablas_myt<-list()
+    culp_myt<-list()
+    cont<- 1
+    
+    for(j in alarma){
+      
+      #Obtiene las observaciones en alarma 
+      local({
+        my_i <- j
+        obsname <- paste("obs_myt", my_i, sep="")
+        
+        output[[obsname]] <- renderUI({
+          tags$p("Para la observacion", my_i)
+          
+        })
+      })
+      
+      
+      #se crean dos vectores con el fin de identificar las posibles causas de alarma
+      culpables<- NULL
+      inocentes<-1:p
+      
+      #Donde ir guardando los resultados para luego mostrarlos
+      T_i<-NULL
+      
+      #Para los incondicionales
+      
+      #ucl para los terminos individuales
+      ucl <- ( (n +1) / (n) )* qf(1-alpha,1,n -1)
+      contador<-1
+      #T_i para terminos incondicionales
+      for(i in 1:p){
+        T_i[i]<-mahalanobis(dat[j,i],center=X[i],cov=S[i,i] )
+        if(T_i[i]>ucl){
+          culpables[contador] <- inocentes[i]
+          contador <- contador+1
+        }
+      }
+      
+      #forma linda de mostrar los resultados
+      texto<- paste(rep("T_",p),1:p,sep="")
+      
+      tabla<-cbind(T_i,ucl)
+      rownames(tabla) <- texto
+      
+      #se quitan del procedimientos las variables que ya mostraron alarma
+      if(length(culpables)>0){
+        inocentes<-inocentes[-culpables]
+      }
+      if(length(inocentes>0)){
+        
+        
+        #se chequea el subvector
+        
+        ucl <- ( ((length(inocentes))*(n +1 )*(n -1))
+                 /  (n*(n-length(inocentes)))  )* qf(1-alpha,length(inocentes),
+                                                     n-length(inocentes))
+        
+        T_i<-mahalanobis(dat[j,inocentes],center=X[inocentes],cov=S[inocentes,inocentes] )
+        
+        # y se continua con las que siguen siendo inocentes para los casos por pares y etc
+        
+        if(T_i>=ucl){
+          
+          #La iteracion se empieza en los subconjuntos de tamano 2
+          tamano <- 2
+          culpables_aux<-NULL
+          
+          
+          while(length(inocentes)>0 ){
+            
+            T_i<-NULL
+            texto<-NULL
+            contador<-1
+            #Definicion de subconjuntos a tomar segun el tamano en el paso
+            #auxiliar<-combn(inocentes,tamano)
+            auxiliar<-t(permutations(length(inocentes),tamano,inocentes))
+            #ucl calculado segun la cantidad de terminos condicionantes
+            ucl <- (((n +1)*(n -1))/(n*(n -(nrow(auxiliar)-1) -1)))*qf(1-alpha,1,
+                                                                       n -(nrow(auxiliar)-1) -1)
+            #atravez de todas las posibles combinaciones del tamano especificado, se hallara su respectivo T2
+            #a partir de la sustraccion
+            for(i in 1:ncol(auxiliar)){
+              #se calcula del T_i condicional a partir de la igual de las sustraciones
+              T_i[i]<-mahalanobis(dat[j,auxiliar[,i]],center=X[auxiliar[,i]],cov=S[auxiliar[,i],auxiliar[,i]] )-
+                mahalanobis(dat[j,auxiliar[-1,i]],center=X[auxiliar[-1,i]],cov=S[auxiliar[-1,i],auxiliar[-1,i]] )
+              
+              #creacion del T_i para identificarlo en la tabla
+              texto[i] <- paste0(paste0("T_",auxiliar[1,i],"|"),
+                                 paste0(auxiliar[-1,i],collapse = ","))
+              
+              if(T_i[i]>ucl){
+                culpables_aux<- unique(c(culpables_aux,auxiliar[,i]))
+              }
+            }
+            
+            #Se anaden lo culpables encontrados
+            culpables <- c(culpables,culpables_aux)
+            
+            #Se agregan los resultados a la salida
+            tabla_aux<-cbind(T_i,ucl)
+            rownames(tabla_aux) <- texto
+            
+            tabla<- rbind(tabla,tabla_aux)
+            
+            #Si encontro nuevos culpables debemos quitarlos de la lista de inocentes
+            if(length(culpables_aux)>0){
+              #Se quita de los inocentes aquellos allados como culpables
+              inocentes<-inocentes[-match(culpables_aux,inocentes)]
+            }
+            #En el caso de que nos quedaramos sin inocentes se debe para el ciclo
+            if(length(inocentes)>0){#para cuando hayan inocentes
+              #Calculo del subvector restante
+              ucl <- ( ((length(inocentes))*(n +1 )*(n -1))
+                       /  (n*(n-length(inocentes)))  )* qf(1-alpha,length(inocentes),
+                                                           n-length(inocentes))
+              
+              T_i<-mahalanobis(dat[j,inocentes],center=X[inocentes],cov=S[inocentes,inocentes] )
+              #Si el T2 con el subvector no es significativo, se termino el proceso
+              if(T_i<=ucl){
+                break
+              }
+              
+            }else{#se para el ciclo si no hay inocentes
+              break
+            }
+            #aumento del contador del tamano de subconjuntos
+            tamano<- tamano+1
+          }
+        }
+        
+      }
+      
+      #Se almacenan la tabla y los culpables para esta alarma
+      
+      tablas_myt[[cont]]<-round(tabla,3)
+      culp_myt[[cont]]<-culpables
+      cont<-cont+1
+      
+    }
+    #Todas las tablas y culpables para cada alarmas estan aqui
+    return(list(tablas_myt,culp_myt) )
+  }
+  
+  # The Murphy out-of-control algorithm ----------------------------------------
+  
+  Murphy <- function(dat, HSD, alpha = 0.05){
+    
+    # Numero de observaciones usadas en la fase 1
+    n <- nrow(HSD)
+    
+    # Vector de medias historico
+    X <- apply(HSD,2,mean)
+    
+    # Matriz de varianzas historicas
+    S <- var(HSD)
+    
+    # Numero de observaciones usadas en la fase 2
+    n1 <- nrow(dat)
+    
+    # Numero de variables
+    p <- ncol(dat)
+    
+    # Calculo del UCL teorico a partir de la media y varianza especificada
+    UCL<-((p*(n+1)*(n-1)) / (n*(n-p)))*qf((1-alpha),p,n-p)
+    
+    # Calculo del T2 para cada vector de observaciones
+    T2<-mahalanobis(dat,center=X,cov=S)
+    
+    #Listas para almacenar las salidas
+    tablas_mur<-list()
+    culp_mur<-list()
+    cont<- 1
+    
+    # Vector de indices de las alarmas
+    alarma <- T2info(HSD, dat, alpha2 = alpha)[[2]]$senales
+    
+    
+    for (j in alarma){
+      
+      #Se guardan las alarmas para su posterior uso
+      local({
+        my_i <- j
+        obsname <- paste("obs_mur", my_i, sep="")
+        
+        output[[obsname]] <- renderUI({
+          tags$p("Para la observacion ",my_i)
+          
+        })
+      })
+      
+      
+      # se crea un vecto nulo para alojar a los culpables en cada paso
+      culpables <- NULL
+      #Se empieza con todas las variables inocentes y se iran eliminando
+      inocentes <- 1:p
+      tabla<-NULL
+      
+      
+      while(length(inocentes)>0 ){
+        #culpable encontrado en cada paso
+        culpables_aux<-NULL
+        #vector donde se alojaran las diferencias
+        T_i_diff <- NULL
+        
+        contador<-1
+        #Para todos los que siguen siendo inocentes se prueba su distancia al T2
+        #completo en presencia a las que ya han sido encontradas culpables
+        for(i in inocentes){
+          auxiliar<-c(i,culpables)
+          auxiliar<-auxiliar[order(auxiliar)]
+          T_i_diff[contador] <- T2[j]-mahalanobis(dat[j,auxiliar],center=X[auxiliar],
+                                                  cov=S[auxiliar,auxiliar] )
+          contador <- contador+1
+        }
+        #controlador de los grados de libertad de la chi cuadrado
+        tamano <- length(auxiliar)
+        
+        #se haya la variable que esta generando el minimo
+        culpables_aux<-inocentes[which(T_i_diff==min(T_i_diff))[1]]
+        
+        #se agrega a la lista completa de culpables
+        culpables<-c(culpables,culpables_aux)
+        
+        #Si encontro nuevos culpables debemos quitarlos de la lista de inocentes
+        if(length(culpables_aux)>0){
+          #Se quita de los inocentes aquellos hallados como culpables
+          inocentes<-inocentes[-match(culpables_aux,inocentes)]
+        }
+        #Insercion en tabla de resultados
+        if(length(inocentes>1)){
+          tabla_aux<-cbind(T_diff=min(T_i_diff),valor_critico=qchisq(1-alpha,p-tamano))
+          rownames(tabla_aux)<-paste0("T_",paste0(culpables,collapse = ","))
+          
+          tabla<-rbind(tabla,tabla_aux)
+          
+        }
+        
+        #criterio de parada por chi cuadrado
+        if(min(T_i_diff)<=qchisq(1-alpha,p-tamano) ){
+          break
+        }
+        
+      }
+      
+      # Se almacenan la tabla y los culpables para esta alarma
+      tablas_mur[[cont]]<-round(tabla,3)
+      culp_mur[[cont]]<-culpables
+      cont<-cont+1
+     
+    }
+    #Todas las tablas y culpables para cada alarmas estan aqui
+    return(list(tablas_mur,culp_mur) )
+  }
+  
+  # Medodo DFT-----------------------------------------------------------
+  
+  DFT <- function(dat, HSD, alpha = 0.05, Ksim = 0.8){
+    
+    # Numero de observaciones usadas en la fase 1
+    n <- nrow(HSD)
+    
+    # Vector de medias historico
+    X <- apply(HSD,2,mean)
+    
+    # Matriz de varianzas historicas
+    S <- var(HSD)
+    
+    # Numero de observaciones usadas en la fase 2
+    n1 <- nrow(dat)
+    
+    # Numero de variables
+    p <- ncol(dat)
+    
+    # Calculo del UCL teorico a partir de la media y varianza especificada
+    UCL<-((p*(n+1)*(n-1)) / (n*(n-p)))*qf((1-alpha),p,n-p)
+    
+    # Calculo del T2 para cada vector de observaciones
+    T2<-mahalanobis(dat,center=X,cov=S)
+    
+    # Vector de indices de las alarmas
+    alarma <- T2info(HSD, dat, alpha2 = alpha)[[2]]$senales
+    
+    #Listas para almacenar las salidas
+    tablas_dft<-list()
+    culp_dft<-list()
+    cont<- 1
+    
+    #Para todos los casos de alarma
+    for(j in alarma){
+      
+     
+      #Calcule del t_i para cada variable
+      t= as.numeric((dat[j,]-X)/sqrt(diag(S)*(1+1/n)))
+      
+      #Cuantil para luego hallar el k ind(La confianza menor en cada caso)
+      T.t.df=pt(t,n-1)
+      Kind=abs(2*T.t.df-1)
+      
+      #Significancia de bonferroni
+      Kbonf=(p+Ksim-1)/p
+      
+      diagnostico=ifelse(as.vector(Kind>Kbonf),"Variable sospechosa","no")
+      
+      #Los culpables para la alarma son estos
+      culpables=which(diagnostico!="no")
+     
+      #Tabla con los resultados
+      res=data.frame(t,Kind,Kbonf)
+      
+      
+      #Se almacenan para la posteridad
+      tablas_dft[[cont]]<-round(res,3)
+      culp_dft[[cont]]<-culpables
+      cont<-cont+1
+      
+      #Se almacena el numero de la alarma con su mensaje 
+      local({
+        my_i <- j
+        obsname <- paste("obs_dft", my_i, sep="")
+        
+        output[[obsname]] <- renderUI({
+          tags$p("Para la observacion ",my_i,
+                 tags$br(),
+                 "Nivel de confianza nominal",1-alpha,
+                 tags$br(),
+                 "Nivel de confianza simultaneo ",Ksim)
+        
+        })
+      })
+     
+    }
+    #Todas las tablas y culpables para cada alarmas estan aqui
+    return(list(tablas_dft,culp_dft) )
+  }
+  
+ 
+
+  
+
+  # Metodo MBA --------------------------------------------------------------
+  MarabelaskiBersimis <- function(dat,HDS,alpha){
+    
+    
+    # Funcion para estandarizar datos -----------------------------------------
+    estandariza_todo<-function(dat,HDS){
+      estandarizar <- function(X){
+        variable_estandarizada <-(X-mean(X))/sqrt(var(X))
+        return(variable_estandarizada)
+      }
+      
+      estandarizar_nuevos <- function(newdata,X=HDS){
+        variable_estandarizada <-(newdata-mean(X))/sqrt(var(X))
+        return(variable_estandarizada)
+      }
+      HDS_enstand <-apply(HDS,2, estandarizar)
+      nombres <- names(HDS)
+      names(HDS_enstand) <- nombres
+      # Número de observaciones usadas en la fase 1
+      # Vector de medias historico
+      # Matriz de varianzas historicas
+      n <- nrow(HDS_enstand);X_est <- round(apply(HDS_enstand,2,mean));S_est <- var(HDS_enstand)
+      # Número de observaciones usadas en la fase 2
+      # Número de variables
+      n1 <- nrow(dat);p <- ncol(dat)
+      dat_enstand <-matrix(mapply(estandarizar_nuevos,dat,HDS),ncol=p) #E estandar nuevos datos
+      names(dat_enstand) <- nombres
+      return(list(dat_enstand,X_est,S_est))
+    }
+    
+    
+    # Funcion de MBA para una obs ---------------------------------------------
+    funcion_MBA1 <- function(x,mu0,Sigma0,alpha){
+      at=function(t,p){
+        a=c(1/sqrt(2),rep(NA,p-1))
+        i=2:p
+        a[i]=ifelse((i%%2)==0,sin((i/2)*t),cos((i-1)*t/2))
+        a
+      }
+      vandrews=function(a,Sigma){
+        var=(a%*%Sigma)%*%a
+        var
+      }
+      n <- 1;X_est <- mu0;S_est <- Sigma0
+      n1 <- 1;p <- length(x);p1<-length(x)
+      tr=matrix(seq(-pi,pi,by=pi/180),ncol=1)
+      At_aux=t(apply(tr,1,at,p=p))
+      T2_aux <- mahalanobis(x,center=X_est,cov=S_est)
+      UCL_aux<- qchisq(p = (1-alpha),p)
+      
+      fxt=At_aux%*%x
+      LIC=At_aux%*%X_est-sqrt((1/3)*qchisq(0.95,p)*diag(At_aux%*%S_est%*%t(At_aux)))
+      LSC=At_aux%*%X_est+sqrt((1/3)*qchisq(0.95,p)*diag(At_aux%*%S_est%*%t(At_aux)))
+      grafico<- data.frame(tr,fxt,LIC,LSC)
+      v_culpable <- NULL; culpable_Aux<-NULL
+      inocente<-1:p
+      nombres <-colnames(Sigma0);nombre_aux <- nombres
+      x_aux <- x
+      while(T2_aux>UCL_aux){
+        fxt=At_aux%*%x_aux
+        LIC=At_aux%*%X_est-sqrt((1/3)*qchisq(0.95,p1)*diag(At_aux%*%S_est%*%t(At_aux)))
+        LSC=At_aux%*%X_est+sqrt((1/3)*qchisq(0.95,p1)*diag(At_aux%*%S_est%*%t(At_aux)))
+        ind=ifelse(fxt<LIC|fxt>LSC,1,0)
+        aux1=fxt[which(ind==1),];aux2=At_aux[which(ind==1),]  # solo los puntos
+        aux3=aux2*matrix(rep(x_aux,nrow(aux2)),ncol=ncol(aux2),byrow=T)
+        aux4=sign(aux3)==sign(aux1)
+        aux5=apply(abs(aux3*aux4),1,which.max)
+        res <- table(aux5)
+        culpable <- as.numeric(names(res)[which.max(res)])
+        nombre_aux <- nombre_aux[-culpable]
+        inocente_aux <- which(nombres %in% nombre_aux)
+        
+        v_culpable<- nombres[which(nombres %in% setdiff(nombres,nombre_aux))]
+        if(length(inocente_aux)<=1){
+          print("se queda sin variables")
+          print(v_culpable)
+          break
+        }
+        x_aux <- x[inocente_aux]
+        X_est <- mu0[inocente_aux]
+        S_est <- Sigma0[inocente_aux,][,inocente_aux]
+        p1<-length(x_aux)
+        UCL_aux<- qchisq(p = 1-alpha,p1)
+        T2_aux <- mahalanobis(x_aux,center=X_est,cov=S_est)
+        At_aux = t(apply(tr,1,at,p=p1))
+      }
+      return(list(v_culpable,grafico))
+    }  
+    
+    
+    # proceso para obtener las senales
+    alarma <- T2info(HDS, dat, alpha2 = alpha)[[2]]$senales
+    
+    graficos_mba<-list()
+    culp_mba<-list()
+    cont <- 1
+    
+    for(j in alarma){
+      
+      #Obtiene las observaciones en alarma 
+      local({
+        my_i <- j
+        obsname <- paste("obs_mba", my_i, sep="")
+        
+        output[[obsname]] <- renderUI({
+          tags$p("Para la observacion", my_i)
+          
+        })
+      })
+      
+      # se estandarizan los parametros
+      parametros_j <- estandariza_todo(dat = dat[j,],
+                                       HDS = HDS)
+      
+      responsable_j <-funcion_MBA1(x = as.numeric(parametros_j[[1]]),
+                                   mu0 = as.numeric(parametros_j[[2]]),
+                                   Sigma0 = parametros_j[[3]],
+                                   alpha = alpha)
+      
+      culp_mba[[cont]] <- responsable_j[[1]]
+      graficos_mba[[cont]] <- responsable_j[[2]]
+      cont <- cont + 1
+    }
+    return(list(Todos_graficos=graficos_mba,
+                Todos_culpables = culp_mba))
+  }
+  
+# Salidas  ----------------------------------------------------------------
+
+#Textos para saber a que funcion corresponden las salidas
+  output$t1 <- renderUI({
+    req(input$resultados)
+    if("MYT" %in% input$resultados){
+      tags$p(tags$b("Metodo MYT"), align = "center")
+    }
+    })
+  
+  output$t2 <- renderUI({
+    req(input$resultados)
+    if("Murphy" %in% input$resultados){
+      tags$p(tags$b("Metodo de Murphy"), align = "center")
+    }
+  })
+  
+  output$t3 <- renderUI({
+    req(input$resultados)
+    if("DFT" %in% input$resultados){
+      tags$p(tags$b("Metodo DFT"), align = "center")
+    }
+  })
+  
+  output$t4 <- renderUI({
+    req(input$resultados)
+    if("MBA" %in% input$resultados){
+      tags$p(tags$b("Metodo Maravelakis and Bersimis"), align = "center")
+    }
+  })
+  
+  # output$rhds <- renderUI({
+  #   req(input$resultados)
+  #   if("rhds" %in% input$resultados){
+  #     tags$p(tags$b("Resumen numerico del HDS"), align = "center")
+  #   }
+  # }, )
+  
+  output$rnd <- renderUI({
+    req(input$resultados)
+    if("rnd" %in% input$resultados){
+      tags$p(tags$b("Resumen numerico de los nuevos datos"), align = "center")
+    }
+  }, )
+  
+  # Objeto reactivo de los datos historicos
+  datos <- reactive({
+    req(input$HDS)
+    
+    inFile <- input$HDS
+    
+    if (is.null(inFile))
+      return(NULL)
+    
+    read.table(inFile$datapath, header = input$header1,
+    sep = input$sep1,dec = input$dec1, encoding = "UTF-8")
+  })
+  
+  # Objeto reactivo de los nuevos registros
+  nuevos <- reactive({
+    req(input$NR)
+    
+    inFile <- input$NR
+    
+    if (is.null(inFile))
+      return(NULL)
+    
+    read.table(inFile$datapath, header = input$header2,
+               sep = input$sep2,dec = input$dec2, encoding = "UTF-8")
+    
+    
+  })
+  
+  #Ploteo de los datos historicos y como estan siendo leidos
+  output$contents1 <- renderTable({
+    
+    head(datos())
+  })
+  #Ploteo de los datos Fase 2 y como estan siendo leidos
+  output$contents2 <- renderTable({
+    
+    head(nuevos())
+  })
+  
+    # Grafico de la T2 del HDS
+  output$cartaT2 <- renderPlot({
+    T2plot(datos(), nuevos(), input$alpha1, input$alpha2,session)
+  })
+  
+ 
+  # Resumen numerico HDS
+  output$thds <- renderUI({
+    req(input$resultados)
+    if("rhds" %in% input$resultados){
+      
+      # Almacenando la informacion
+      reso <- T2info(datos(), nuevos())
+      # Numero de variables
+      p <- ncol(datos())
+      # Nombres de las variables
+      nombres <- colnames(datos())
+      
+      # Medias ------------------------------------------------------------------
+      
+      meds <- matrix(reso$ResultadosHDS$Medias, ncol=p)
+      nom <- c()
+      for(i in (1:p)){
+        nom <- c(nom, paste("Media", nombres[i]))
+      }
+      colnames(meds) <- nom
+      
+      output$Medias <- renderTable({meds},bordered = TRUE,  spacing="xs",
+                                   width = 'auto', align = 'c',  
+                                   rownames = TRUE)
+      
+      # Matriz de varianzas y covarianzas ---------------------------------------
+      
+      covs <- reso$ResultadosHDS$Covarianzas
+      print(covs)
+      
+      output$Cov <- renderTable({covs},bordered = TRUE,  spacing="xs",
+                                width = 'auto', align = 'c',  
+                                rownames = TRUE)
+      
+      
+      # T^2  --------------------------------------------------------------------
+      
+      obs <- nrow(datos())
+      t2hds <- data.frame(Observacion=1:obs,T2=reso$ResultadosHDS$T2)
+      colnames(t2hds)<-c("Observacion", expression(T^2))
+      t2hds <- as.matrix(t2hds)
+      
+      output$T2hds <- renderTable({t2hds},bordered = TRUE,  spacing="xs",
+                                  width = 'auto', align = 'c',  
+                                  rownames = TRUE)
+      lres <- list(tableOutput("Medias"), tableOutput("Cov"), tableOutput("T2hds"))
+      do.call(tagList, lres)
+      
+    }
+  })
+    
+  # Resumen numerico nuevos datos
+  output$tnd <- renderUI({
+    req(input$resultados)
+    if("rnd" %in% input$resultados){
+      
+      # Almacenando la informacion
+      reso <- T2info(datos(), nuevos())
+      # Numero de variables
+      p <- ncol(datos())
+      # Nombres de las variables
+      nombres <- colnames(datos())
+      
+      # T^2  --------------------------------------------------------------------
+      
+      obsn <- nrow(nuevos())
+      t2nd <- data.frame(Observacion=1:obsn,T2=reso$ResultadosND$T2)
+      colnames(t2nd)<-c("Observacion", expression(T^2))
+      t2nd <- as.matrix(t2nd)
+      
+      output$T2nd <- renderTable({t2nd},bordered = TRUE,  spacing="xs",
+                                 width = 'auto', align = 'c',  
+                                 rownames = TRUE)
+      
+      
+      # senales
+      senales <- matrix(reso$ResultadosND$senales)
+      colnames(senales) <- c("senales")
+      output$signs <- renderTable({senales},bordered = TRUE,  spacing="xs",
+                                  width = 'auto', align = 'c',  
+                                  rownames = TRUE)
+      
+      lresn <- list(tableOutput("T2nd"), tableOutput("signs"))
+      do.call(tagList, lresn)
+    }
+  })  
+    
+# Salidas myt -------------------------------------------------------------
+
+  
+  #Se crean los outputs de myt teniendo las funciones en una lista la salida de la funcion
+  output$table1 <- renderUI({
+    
+    #Verifica para el caso de MYT
+    if("MYT" %in% input$resultados){
+    #Indice de las alarmas
+    alarmas<-T2info(datos(), nuevos(), input$alpha1, input$alpha2)[[2]]$senales 
+    #Resultados de la funcion
+    lista_final<-MYT(nuevos(), datos(), alpha = input$alpha2)
+    
+    #Para cada caso de alarma se crearan los output en html los cuales se encuentran guardados
+    #en las salidas de la funcion
+  
+    for (i in 1:length(alarmas) ) {
+      # Need local so that each item gets its own number. Without it, the value
+      # of i in the renderPlot() will be the same across all instances, because
+      # of when the expression is evaluated.
+      
+      #Se crean las tablas 
+      
+      local({
+        my_i <- i
+        tablename <- paste("table_myt", my_i, sep="")
+        
+        output[[tablename]] <- renderTable({
+          lista_final[[1]][[my_i]]
+          
+          
+          
+        },bordered = TRUE,  spacing="xs",
+        width = 'auto', align = 'c',  
+        rownames = TRUE)
+      })
+      
+      #Se crea el mensaje de los culpables
+      local({
+        my_i <- i
+        textname <- paste("text_myt", my_i, sep="")
+
+        output[[textname]] <- renderUI({
+
+
+          tags$p("Las variables a las cuales se debe la alarma son: ",
+                 paste0(colnames(nuevos())[sort(lista_final[[2]][[my_i]])] ,collapse=",")
+                 )
+
+        })
+      })
+      
+      
+    }
+    #Se invocan los indices de las alarmas
+    table_output_list_1 <-lapply(alarmas ,
+             function(i) {
+               obsname <- paste("obs_myt", i, sep="")
+               htmlOutput(obsname)
+               
+               
+             })
+    
+    #Se invocan las tablas para cada alarma
+    table_output_list_2 <-lapply(1:length( alarmas),
+              function(k) {
+                tablename <- paste("table_myt", k, sep="")
+                tableOutput(tablename)
+                
+                
+              })
+    
+    #Se invocan los culpables para cada alarma
+    
+    table_output_list_3 <-lapply(1:length( alarmas) ,
+             function(i) {
+               textname <- paste("text_myt", i, sep="")
+               htmlOutput(textname)
+
+
+             })
+    
+    
+    #Se unen todas estas invocaciones de forma intercalada para tener el output deseado
+    #Ademas de que genera salidas acorde al numero de alarmas encontrada
+    big_list<-list()
+    contador=1
+    for(i in 1:length(alarmas)) {
+      big_list[[contador]]<-table_output_list_1[[i]]
+      contador=contador+1
+
+      big_list[[contador]]<-table_output_list_2[[i]]
+      contador=contador+1
+
+      big_list[[contador]]<-table_output_list_3[[i]]
+      contador=contador+1
+    }
+
+    #Se envian los output al entorno html que lo requiere "table"
+    do.call(tagList, big_list )
+    
+    }
+  })#Final del render ui myt
+  
+
+# Salidas Murphy ----------------------------------------------------------
+
+  
+  
+  #Se crean los outputs de murphy teniendo las funciones en una lista la salida de la funcion
+  output$table2 <- renderUI({
+    
+    if("Murphy" %in% input$resultados){
+      alarmas<-T2info(datos(), nuevos(), input$alpha1, input$alpha2)[[2]]$senales 
+      lista_final<-Murphy(nuevos(), datos(), alpha = input$alpha2)
+      
+      
+      for (i in 1:length(alarmas) ) {
+        # Need local so that each item gets its own number. Without it, the value
+        # of i in the renderPlot() will be the same across all instances, because
+        # of when the expression is evaluated.
+        local({
+          my_i <- i
+          tablename <- paste("table_mur", my_i, sep="")
+          
+          output[[tablename]] <- renderTable({
+            lista_final[[1]][[my_i]]
+            
+            
+            
+          },bordered = TRUE,  spacing="xs",
+          width = 'auto', align = 'c',  
+          rownames = TRUE)
+        })
+        
+        local({
+          my_i <- i
+          textname <- paste("text_mur", my_i, sep="")
+          
+          output[[textname]] <- renderUI({
+            
+            
+            tags$p("Las variables a las cuales se debe la alarma son: ",
+                         paste0(colnames(nuevos())[sort(lista_final[[2]][[my_i]])] ,collapse="," ) )
+            
+          })
+        })
+        
+        
+      }
+      table_output_list_1 <-lapply(alarmas ,
+                                   function(i) {
+                                     obsname <- paste("obs_mur", i, sep="")
+                                     htmlOutput(obsname)
+                                     
+                                     
+                                   })
+      
+      table_output_list_2 <-lapply(1:length( alarmas),
+                                   function(k) {
+                                     tablename <- paste("table_mur", k, sep="")
+                                     tableOutput(tablename)
+                                     
+                                     
+                                   })
+      
+      
+      
+      table_output_list_3 <-lapply(1:length( alarmas) ,
+                                   function(i) {
+                                     textname <- paste("text_mur", i, sep="")
+                                     htmlOutput(textname)
+                                     
+                                   })
+      
+      big_list<-list()
+      contador=1
+      for(i in 1:length(alarmas)) {
+        big_list[[contador]]<-table_output_list_1[[i]]
+        contador=contador+1
+        
+        big_list[[contador]]<-table_output_list_2[[i]]
+        contador=contador+1
+        
+        big_list[[contador]]<-table_output_list_3[[i]]
+        contador=contador+1
+      }
+      
+      
+      do.call(tagList, big_list )
+      
+    }
+  })#Final del render ui murhy
+  
+
+# Salidas DFT -------------------------------------------------------------
+
+  
+  #Se crean los outputs de DFT teniendo las funciones en una lista la salida de la funcion
+  
+
+  output$table3 <- renderUI({
+
+    if("DFT" %in% input$resultados){
+      alarmas<-T2info(datos(), nuevos(), input$alpha1, input$alpha2)[[2]]$senales
+      lista_final<-DFT(nuevos(), datos(), alpha = input$alpha2)
+
+      
+      for (i in 1:length(alarmas) ) {
+        # Need local so that each item gets its own number. Without it, the value
+        # of i in the renderPlot() will be the same across all instances, because
+        # of when the expression is evaluated.
+        local({
+          my_i <- i
+          tablename <- paste("table_dft", my_i, sep="")
+
+          output[[tablename]] <- renderTable({
+            lista_final[[1]][[my_i]]
+
+
+
+          },bordered = TRUE, spacing="xs",
+          width = 'auto', align = 'c',
+          rownames = TRUE)
+        })
+
+        local({
+          my_i <- i
+          textname <- paste("text_dft", my_i, sep="")
+
+          output[[textname]] <- renderUI({
+
+
+            tags$p("Las variables a las cuales se debe la alarma son: ",
+                         paste0(colnames(nuevos())[sort(lista_final[[2]][[my_i]])] ,collapse=",") )
+
+          })
+        })
+
+
+      }
+      table_output_list_1 <-lapply(alarmas ,
+                                   function(i) {
+                                     obsname <- paste("obs_dft", i, sep="")
+                                     htmlOutput(obsname)
+
+
+                                   })
+
+      table_output_list_2 <-lapply(1:length( alarmas),
+                                   function(k) {
+                                     tablename <- paste("table_dft", k, sep="")
+                                     tableOutput(tablename)
+
+
+                                   })
+
+
+
+      table_output_list_3 <-lapply(1:length( alarmas) ,
+                                   function(i) {
+                                     textname <- paste("text_dft", i, sep="")
+                                     htmlOutput(textname)
+
+
+                                   })
+
+      big_list<-list()
+      contador=1
+      for(i in 1:length(alarmas)) {
+        big_list[[contador]]<-table_output_list_1[[i]]
+        contador=contador+1
+
+        big_list[[contador]]<-table_output_list_2[[i]]
+        contador=contador+1
+
+        big_list[[contador]]<-table_output_list_3[[i]]
+        contador=contador+1
+      }
+
+
+      do.call(tagList, big_list )
+
+    }
+  })#Final del render ui DFT
+  
+  
+  
+
+# Salida de Marabeñliski and Bersimis -------------------------------------
+
+  output$table4 <- renderUI({
+    
+    if("MBA" %in% input$resultados){
+      alarmas<-T2info(datos(), nuevos(), input$alpha1, input$alpha2)[[2]]$senales
+      lista_final<-MarabelaskiBersimis(nuevos(), datos(), alpha = input$alpha2)
+      
+      for (i in 1:length(alarmas) ) {
+        
+        #Se crean las tablas 
+        local({
+          my_i <- i
+          tablename <- paste("table_mba", my_i, sep="")
+          
+          output[[tablename]] <- renderPlot({
+            hola <-data.frame(lista_final[[1]][[my_i]])
+            tr=matrix(seq(-pi,pi,by=pi/180),ncol=1)
+            matplot(hola[,1],hola[,2:4],
+                    type="l",col=c(1,2,2),lty=1,lwd=c(1,2,2),xaxt="n",
+                    las=1,xlab = "tr",ylab = expression(f[x](t)),
+                    main=paste("Grafico de observacion con todas las variables:"));abline(h=0)
+            axis(1,at=tr[seq(1,361,40)],seq(1,361,40))
+            
+          })#,bordered = TRUE,  spacing="xs",
+          #width = 'auto', align = 'c',  
+          #rownames = TRUE)
+        })
+        
+        #Se crea el mensaje de los culpables
+        local({
+          my_i <- i
+          textname <- paste("text_mba", my_i, sep="")
+          
+          output[[textname]] <- renderUI({
+            
+            
+            tags$p("Las variables a las cuales se debe la alarma son: ",
+                   #lista_final[[2]][[my_i]]
+                   paste0(colnames(datos())[which(colnames(datos()) %in% lista_final[[2]][[my_i]] )],collapse=",")
+                   )
+             
+            
+          })
+        })
+      }
+      
+      #Se invocan los indices de las alarmas
+      table_output_list_1 <-lapply(alarmas ,
+                                   function(i) {
+                                     obsname <- paste("obs_mba", i, sep="")
+                                     htmlOutput(obsname)
+                                   })
+      
+      #Se invocan las tablas para cada alarma
+      table_output_list_2 <-lapply(1:length( alarmas),
+                                   function(k) {
+                                     tablename <- paste("table_mba", k, sep="")
+                                     plotOutput(tablename)
+                                   })
+      
+      #Se invocan los culpables para cada alarma
+      
+      table_output_list_3 <-lapply(1:length( alarmas) ,
+                                   function(i) {
+                                     textname <- paste("text_mba", i, sep="")
+                                     htmlOutput(textname)
+                                   })
+      
+      #Se unen todas estas invocaciones de forma intercalada para tener el output deseado
+      #Ademas de que genera salidas acorde al numero de alarmas encontrada
+      big_list<-list()
+      contador=1
+      for(i in 1:length(alarmas)) {
+        big_list[[contador]]<-table_output_list_1[[i]]
+        contador=contador+1
+        
+        big_list[[contador]]<-table_output_list_2[[i]]
+        contador=contador+1
+        
+        big_list[[contador]]<-table_output_list_3[[i]]
+        contador=contador+1
+      }
+      
+      #Se envian los output al entorno html que lo requiere "table"
+      do.call(tagList, big_list )
+    }
+    
+  })
+  
+}#Cierre del server
+
+
+
+
+
+
+
+shinyApp(ui, server)
+
+
+
+
